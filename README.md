@@ -74,7 +74,7 @@ app
 
 ---
 
-## ▶️ Ejecución del proyecto
+## Ejecución del proyecto
 
 1. Clonar el repositorio.
 2. Abrir el proyecto en Android Studio.
@@ -83,7 +83,7 @@ app
 
 ---
 
-## 📹 Video de explicación
+## Video de explicación
 
 > Enlace del video: https://drive.google.com/drive/folders/1Gui86Tz424hzB1H5DrrBsIzI8BcGapri?usp=drive_link
 
