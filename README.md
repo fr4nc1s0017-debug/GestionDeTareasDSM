@@ -87,6 +87,7 @@ app
 
 > Enlace del video: https://drive.google.com/drive/folders/1Gui86Tz424hzB1H5DrrBsIzI8BcGapri?usp=drive_link
 
+PARTE DIEGO
 ## Configuración
 
 Se habilitó View Binding en el archivo `build.gradle` del módulo de la aplicación.
@@ -101,7 +102,7 @@ android {
 
 Posteriormente se sincronizó el proyecto con Gradle para que Android Studio generara automáticamente las clases Binding correspondientes.
 Esta clase permite acceder directamente a cada componente definido en el archivo XML.
-# 2. Diseño de la pantalla principal (activity_main.xml)
+# Diseño de la pantalla principal (activity_main.xml)
 
 Se diseñó la interfaz principal de la aplicación, organizando los elementos de forma clara para mejorar la experiencia del usuario.
 
@@ -141,7 +142,7 @@ ScrollView
 
 ---
 
-# 3. Temporizador
+# Temporizador
 
 Se diseñó la sección encargada de mostrar el tiempo restante del método Pomodoro.
 
@@ -161,7 +162,7 @@ La lógica del conteo regresivo será implementada posteriormente.
 
 ---
 
-# 4. ProgressBar
+# ProgressBar
 
 Se incorporó una barra de progreso horizontal para representar visualmente el avance de la sesión Pomodoro.
 
@@ -171,7 +172,7 @@ Inicialmente permanece en estado de espera hasta que el temporizador sea iniciad
 
 ---
 
-# 5. Botones del temporizador
+# Botones del temporizador
 
 Se agregaron cuatro botones encargados del control del temporizador.
 
@@ -186,7 +187,7 @@ En esta etapa únicamente se diseñó la interfaz gráfica; la funcionalidad ser
 
 ---
 
-# 6. Sección de tareas
+# Sección de tareas
 
 Se agregó un campo de texto (`EditText`) para ingresar nuevas tareas.
 
@@ -196,11 +197,11 @@ La lógica de validación y almacenamiento será desarrollada posteriormente.
 
 ---
 
-# 7. Resumen de productividad
+# Resumen de productividad
 
 Se diseñó una sección destinada a mostrar información resumida sobre el avance del usuario.
 
-Incluye:
+Incluimos
 
 - Número de tareas pendientes.
 - Número de sesiones Pomodoro completadas.
@@ -209,7 +210,7 @@ Estos valores serán actualizados dinámicamente cuando se implemente la lógica
 
 ---
 
-# 8. Mensajes de estado vacío
+# Mensajes de estado vacío
 Se agregaron mensajes informativos para mejorar la experiencia del usuario cuando aún no existen datos.
 
 ## Sin tareas
@@ -228,7 +229,7 @@ Estos mensajes desaparecerán automáticamente cuando existan elementos para mos
 
 ---
 
-# 9. XML reutilizable para tareas
+# XML reutilizable para tareas
 
 Se creó un archivo independiente llamado:
 
@@ -248,7 +249,7 @@ La reutilización permite crear dinámicamente múltiples tareas sin duplicar c�
 
 ---
 
-# 10. XML reutilizable para historial
+# XML reutilizable para historial
 
 Se creó un segundo archivo llamado:
 
