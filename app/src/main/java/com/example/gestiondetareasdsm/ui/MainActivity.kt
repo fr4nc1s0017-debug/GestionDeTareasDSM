@@ -1,51 +1,52 @@
 package com.example.gestiondetareasdsm.ui
 
+import android.app.AlertDialog
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.gestiondetareasdsm.R
 import com.example.gestiondetareasdsm.databinding.ActivityMainBinding
 import com.example.gestiondetareasdsm.model.Session
 import com.example.gestiondetareasdsm.model.Task
+import com.example.gestiondetareasdsm.storage.DataStoreManager
 import com.example.gestiondetareasdsm.timer.PomodoroTimer
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
-import android.app.AlertDialog
-import android.text.InputType
-import android.widget.EditText
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-
-    private val tasks = mutableListOf<Task>()
-    private var nextId = 1
-
-    private val sessions = mutableListOf<Session>()
-    private var nextSessionId = 1
-
+    private val viewModel: MainViewModel by viewModels()
+    private lateinit var storage: DataStoreManager
     private lateinit var pomodoro: PomodoroTimer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         enableEdgeToEdge()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        storage = DataStoreManager(this)
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -53,185 +54,136 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        //==========================
-        // TEMPORIZADOR
-        //==========================
+        lifecycleScope.launch {
+            viewModel.tasks.clear()
+            viewModel.tasks.addAll(storage.getTasks().first())
+            viewModel.sessions.clear()
+            viewModel.sessions.addAll(storage.getSessions().first())
 
-        pomodoro = PomodoroTimer(
+            viewModel.nextTaskId = (viewModel.tasks.maxOfOrNull { it.id } ?: 0) + 1
+            viewModel.nextSessionId = (viewModel.sessions.maxOfOrNull { it.id } ?: 0) + 1
 
-            onTick = { time, progress ->
-                val minutes = (time / 1000) / 60
-                val seconds = (time / 1000) % 60
-                binding.tvTimer.text = String.format("%02d:%02d", minutes, seconds)
-                binding.pbPomodoro.progress = progress
-            },
+            viewModel.remainingTime = storage.getRemainingTime().first().takeIf { it > 0 } ?: PomodoroTimer.DEFAULT_TIME
+            viewModel.finishTimeMillis = storage.getFinishTime().first()
 
-            onFinish = {
-                val minutes = (pomodoro.totalTime / 1000) / 60
-                val seconds = (pomodoro.totalTime / 1000) % 60
-                binding.tvTimer.text = String.format("%02d:%02d", minutes, seconds)
-                binding.pbPomodoro.progress = 100
-
-                vibrate()
-
-                val activeTask = tasks.find { it.active }
-                if (activeTask != null) {
-                    registerSession(activeTask.title)
-                }
-
-                Toast.makeText(this, "¡Pomodoro terminado!", Toast.LENGTH_LONG).show()
-            },
-
-            onStateChanged = { state ->
-                updateButtonStates(state)
-            }
-        )
-
-        //==========================
-        // TOCAR EL TIMER PARA CONFIGURAR MINUTOS
-        //==========================
-
-        binding.tvTimer.setOnClickListener {
-            showSetDurationDialog()
+            setupTimer()
+            drawTasks()
+            drawHistory()
+            updateSummary()
+            updateEmptyState()
+            updateEmptyHistory()
         }
 
-
-
-        //==========================
-        // BOTÓN AGREGAR
-        //==========================
-
-        binding.btnAdd.setOnClickListener {
-            addTask()
-        }
-
-        //==========================
-        // BOTÓN INICIAR
-        //==========================
-
+        binding.tvTimer.setOnClickListener { showSetDurationDialog() }
+        binding.btnAdd.setOnClickListener { addTask() }
         binding.btnStart.setOnClickListener {
-            val activeTask = tasks.find { it.active }
-
-            if (activeTask == null) {
+            if (viewModel.getActiveTask() == null) {
                 Toast.makeText(this, "Seleccione una tarea antes de iniciar.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-
             pomodoro.start()
         }
-
-        //==========================
-        // BOTÓN PAUSAR
-        //==========================
-
-        binding.btnPause.setOnClickListener {
-            pomodoro.pause()
-        }
-
-        //==========================
-        // BOTÓN REANUDAR
-        //==========================
-
-        binding.btnResume.setOnClickListener {
-            pomodoro.resume()
-        }
-
-        //==========================
-        // BOTÓN REINICIAR
-        //==========================
-
+        binding.btnPause.setOnClickListener { pomodoro.pause() }
+        binding.btnResume.setOnClickListener { pomodoro.resume() }
         binding.btnReset.setOnClickListener {
             pomodoro.reset()
+            lifecycleScope.launch {
+                storage.saveRemainingTime(pomodoro.remainingTime)
+                storage.saveFinishTime(0L)
+            }
         }
-
-        updateButtonStates(pomodoro.state)
-        updateSummary()
-        updateEmptyState()
-        updateEmptyHistory()
     }
 
-    //==========================================================
-    // AGREGAR TAREA
-    //==========================================================
+    private fun setupTimer() {
+        pomodoro = PomodoroTimer(
+            onTick = { time, progress ->
+                viewModel.remainingTime = time
+                binding.tvTimer.text = String.format("%02d:%02d", (time / 1000) / 60, (time / 1000) % 60)
+                binding.pbPomodoro.progress = progress
+
+                lifecycleScope.launch {
+                    storage.saveRemainingTime(time)
+                    storage.saveFinishTime(pomodoro.finishTimeMillis)
+                }
+            },
+            onFinish = {
+                binding.pbPomodoro.progress = 100
+                vibrate()
+                viewModel.getActiveTask()?.let { registerSession(it.title) }
+                lifecycleScope.launch {
+                    storage.saveRemainingTime(0L)
+                    storage.saveFinishTime(0L)
+                }
+                Toast.makeText(this, "¡Pomodoro terminado!", Toast.LENGTH_LONG).show()
+            },
+            onStateChanged = { updateButtonStates(it) }
+        )
+
+        if (viewModel.remainingTime != PomodoroTimer.DEFAULT_TIME) {
+            val field = pomodoro::class.java.getDeclaredField("remainingTime")
+            field.isAccessible = true
+            field.setLong(pomodoro, viewModel.remainingTime)
+        }
+
+        if (viewModel.finishTimeMillis > 0) {
+            val finishField = pomodoro::class.java.getDeclaredField("finishTimeMillis")
+            finishField.isAccessible = true
+            finishField.setLong(pomodoro, viewModel.finishTimeMillis)
+            pomodoro.restoreRemainingTime()
+        }
+
+        binding.tvTimer.text = String.format("%02d:%02d", (viewModel.remainingTime / 1000) / 60, (viewModel.remainingTime / 1000) % 60)
+        updateButtonStates(pomodoro.state)
+    }
 
     private fun addTask() {
         val title = binding.etTask.text.toString().trim()
-
         if (title.isEmpty()) {
             Toast.makeText(this, "Ingrese una tarea.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        tasks.add(Task(id = nextId++, title = title))
+        viewModel.addTask(title)
         binding.etTask.text.clear()
+        saveTasks()
         drawTasks()
     }
 
+    private fun saveTasks() {
+        lifecycleScope.launch { storage.saveTasks(viewModel.tasks) }
+    }
 
-    //==========================================================
-    // CONFIGURAR DURACIÓN DEL TEMPORIZADOR
-    //==========================================================
+    private fun saveSessions() {
+        lifecycleScope.launch { storage.saveSessions(viewModel.sessions) }
+    }
 
     private fun showSetDurationDialog() {
-
-        if (pomodoro.state == PomodoroTimer.TimerState.RUNNING ||
-            pomodoro.state == PomodoroTimer.TimerState.PAUSED) {
-
-            Toast.makeText(
-                this,
-                "Reinicia el temporizador antes de cambiar la duración.",
-                Toast.LENGTH_SHORT
-            ).show()
-
+        if (pomodoro.state == PomodoroTimer.TimerState.RUNNING || pomodoro.state == PomodoroTimer.TimerState.PAUSED) {
+            Toast.makeText(this, "Reinicia el temporizador antes de cambiar la duración.", Toast.LENGTH_SHORT).show()
             return
         }
 
         val input = EditText(this)
         input.inputType = InputType.TYPE_CLASS_NUMBER
-
-        val currentMinutes = (pomodoro.totalTime / 1000 / 60).toInt()
-        input.setText(currentMinutes.toString())
-        input.hint = "Minutos"
-        input.setSelection(input.text.length)
+        input.setText((pomodoro.totalTime / 1000 / 60).toInt().toString())
 
         AlertDialog.Builder(this)
             .setTitle("Configurar duración")
-            .setMessage("Ingresa la cantidad de minutos para la cuenta regresiva")
             .setView(input)
             .setPositiveButton("Aceptar") { _, _ ->
-
-                val minutes = input.text.toString().toIntOrNull()
-
-                if (minutes == null || minutes <= 0) {
-
-                    Toast.makeText(
-                        this,
-                        "Ingresa un número de minutos válido.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                } else {
-
-                    pomodoro.setDurationMinutes(minutes)
-
+                input.text.toString().toIntOrNull()?.let {
+                    if (it > 0) pomodoro.setDurationMinutes(it)
                 }
-
             }
             .setNegativeButton("Cancelar", null)
             .show()
-
     }
-
-    //==========================================================
-    // DIBUJAR TAREAS
-    //==========================================================
 
     private fun drawTasks() {
         binding.llTasksContainer.removeAllViews()
 
-        for (task in tasks) {
-            val view = LayoutInflater.from(this)
-                .inflate(R.layout.item_task, binding.llTasksContainer, false)
+        for (task in viewModel.tasks) {
+            val view = LayoutInflater.from(this).inflate(R.layout.item_task, binding.llTasksContainer, false)
 
             val check = view.findViewById<CheckBox>(R.id.cbCompleted)
             val text = view.findViewById<TextView>(R.id.tvTaskName)
@@ -239,25 +191,24 @@ class MainActivity : AppCompatActivity() {
 
             text.text = task.title
             check.isChecked = task.completed
-
-            if (task.active) {
-                view.setBackgroundColor(0xFFE3F2FD.toInt())
-            } else {
-                view.setBackgroundColor(0x00000000)
-            }
+            view.setBackgroundColor(if (task.active) 0xFFE3F2FD.toInt() else 0x00000000)
 
             check.setOnCheckedChangeListener { _, isChecked ->
                 task.completed = isChecked
+                saveTasks()
                 updateSummary()
             }
 
             delete.setOnClickListener {
-                tasks.remove(task)
+                viewModel.removeTask(task)
+                saveTasks()
                 drawTasks()
             }
 
             view.setOnClickListener {
-                selectTask(task)
+                viewModel.selectTask(task)
+                saveTasks()
+                drawTasks()
             }
 
             binding.llTasksContainer.addView(view)
@@ -267,32 +218,10 @@ class MainActivity : AppCompatActivity() {
         updateEmptyState()
     }
 
-    //==========================================================
-    // SELECCIONAR TAREA ACTIVA
-    //==========================================================
-
-    private fun selectTask(selected: Task) {
-        tasks.forEach { it.active = false }
-        selected.active = true
-        drawTasks()
-    }
-
-    //==========================================================
-    // HISTORIAL DE SESIONES
-    //==========================================================
-
     private fun registerSession(taskTitle: String) {
-        val format = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        val time = format.format(System.currentTimeMillis())
-
-        sessions.add(
-            Session(
-                id = nextSessionId++,
-                taskTitle = taskTitle,
-                time = time
-            )
-        )
-
+        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(System.currentTimeMillis())
+        viewModel.addSession(Session(viewModel.nextSessionId++, taskTitle, time))
+        saveSessions()
         drawHistory()
         updateSummary()
     }
@@ -300,52 +229,31 @@ class MainActivity : AppCompatActivity() {
     private fun drawHistory() {
         binding.llHistoryContainer.removeAllViews()
 
-        for (session in sessions) {
-            val view = LayoutInflater.from(this)
-                .inflate(R.layout.item_session, binding.llHistoryContainer, false)
-            val taskName = view.findViewById<TextView>(R.id.tvSessionTask)
-            val time = view.findViewById<TextView>(R.id.tvSessionTime)
-            taskName.text = session.taskTitle
-            time.text = session.time
+        for (session in viewModel.sessions) {
+            val view = LayoutInflater.from(this).inflate(R.layout.item_session, binding.llHistoryContainer, false)
+            view.findViewById<TextView>(R.id.tvSessionTask).text = session.taskTitle
+            view.findViewById<TextView>(R.id.tvSessionTime).text = session.time
             binding.llHistoryContainer.addView(view)
         }
+
         updateEmptyHistory()
     }
 
     private fun updateEmptyHistory() {
-        binding.tvEmptyHistory.visibility =
-            if (sessions.isEmpty()) View.VISIBLE else View.GONE
+        binding.tvEmptyHistory.visibility = if (viewModel.sessions.isEmpty()) View.VISIBLE else View.GONE
     }
-
-    //==========================================================
-    // RESUMEN
-    //==========================================================
 
     private fun updateSummary() {
-        val completed = tasks.count { it.completed }
-        val pending = tasks.size - completed
-
-        binding.tvSummary.text =
-            "Tareas pendientes: $pending\nSesiones completadas: ${sessions.size}"
+        binding.tvSummary.text = "Tareas pendientes: ${viewModel.pendingTasks()}\nSesiones completadas: ${viewModel.sessions.size}"
     }
-
-    //==========================================================
-    // MENSAJE CUANDO NO HAY TAREAS
-    //==========================================================
 
     private fun updateEmptyState() {
-        binding.tvEmptyTasks.visibility =
-            if (tasks.isEmpty()) View.VISIBLE else View.GONE
+        binding.tvEmptyTasks.visibility = if (viewModel.tasks.isEmpty()) View.VISIBLE else View.GONE
     }
-
-    //==========================================================
-    // ESTADO DE BOTONES SEGÚN EL TEMPORIZADOR
-    //==========================================================
 
     private fun updateButtonStates(state: PomodoroTimer.TimerState) {
         when (state) {
-            PomodoroTimer.TimerState.IDLE,
-            PomodoroTimer.TimerState.FINISHED -> {
+            PomodoroTimer.TimerState.IDLE, PomodoroTimer.TimerState.FINISHED -> {
                 binding.btnStart.isEnabled = true
                 binding.btnPause.isEnabled = false
                 binding.btnResume.isEnabled = false
@@ -366,14 +274,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    //==========================================================
-    // VIBRACIÓN AL TERMINAR
-    //==========================================================
-
     private fun vibrate() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = getSystemService(VibratorManager::class.java)
-            manager.defaultVibrator
+            getSystemService(VibratorManager::class.java).defaultVibrator
         } else {
             @Suppress("DEPRECATION")
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -386,4 +289,5 @@ class MainActivity : AppCompatActivity() {
             vibrator.vibrate(500)
         }
     }
+
 }

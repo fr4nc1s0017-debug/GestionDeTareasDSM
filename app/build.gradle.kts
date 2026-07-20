@@ -39,6 +39,21 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
 
+    // ViewModel
+
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.2")
+
+    // DataStore
+
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
+
+    // Serialización JSON
+
+    implementation("com.google.code.gson:gson:2.13.1")
+
+
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
