@@ -4,18 +4,12 @@ plugins {
 
 android {
     namespace = "com.example.gestiondetareasdsm"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-
-    }
-
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.gestiondetareasdsm"
-        minSdk = 36
-        targetSdk = 36
+        minSdk = 26
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -24,20 +18,19 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            isMinifyEnabled = false
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     buildFeatures {
         viewBinding = true
     }
 }
-
 
 dependencies {
     implementation(libs.androidx.activity.ktx)
@@ -45,7 +38,8 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
+
     testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }

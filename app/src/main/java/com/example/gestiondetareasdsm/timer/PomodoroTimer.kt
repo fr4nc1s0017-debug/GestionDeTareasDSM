@@ -3,85 +3,94 @@ package com.example.gestiondetareasdsm.timer
 import android.os.CountDownTimer
 
 class PomodoroTimer(
-
     private val onTick: (Long, Int) -> Unit,
-    private val onFinish: () -> Unit
-
+    private val onFinish: () -> Unit,
+    private val onStateChanged: (TimerState) -> Unit
 ) {
 
-    companion object {
-
-        const val TOTAL_TIME = 25 * 60 * 1000L
-
+    enum class TimerState {
+        IDLE, RUNNING, PAUSED, FINISHED
     }
 
-    private var remainingTime = TOTAL_TIME
+    companion object {
+        const val DEFAULT_TIME = 25 * 60 * 1000L
+    }
 
-    private var timer: CountDownTimer? = null
-
-    var isRunning = false
+    // Duración configurable (por defecto 25 minutos)
+    var totalTime: Long = DEFAULT_TIME
         private set
 
+    private var remainingTime = totalTime
+    private var timer: CountDownTimer? = null
+
+    var state: TimerState = TimerState.IDLE
+        private set
+
+    /**
+     * Cambia la duración del temporizador (en minutos).
+     * Solo permitido si el timer está en IDLE o FINISHED.
+     */
+    fun setDurationMinutes(minutes: Int): Boolean {
+
+        if (state == TimerState.RUNNING || state == TimerState.PAUSED) {
+            return false
+        }
+
+        totalTime = minutes * 60 * 1000L
+        remainingTime = totalTime
+
+        onTick(remainingTime, 0)
+
+        return true
+    }
+
     fun start() {
+
+        if (state == TimerState.RUNNING) return
 
         timer?.cancel()
 
         timer = object : CountDownTimer(remainingTime, 1000) {
 
             override fun onTick(millisUntilFinished: Long) {
-
                 remainingTime = millisUntilFinished
-
                 val progress =
-
-                    (((TOTAL_TIME - remainingTime).toFloat() / TOTAL_TIME) * 100).toInt()
-
+                    (((totalTime - remainingTime).toFloat() / totalTime) * 100).toInt()
                 onTick(remainingTime, progress)
-
             }
 
             override fun onFinish() {
-
-                remainingTime = TOTAL_TIME
-
-                isRunning = false
-
-                onFinish()
-
+                remainingTime = totalTime
+                state = TimerState.FINISHED
+                onStateChanged(state)
+                this@PomodoroTimer.onFinish()
             }
-
         }
 
-        isRunning = true
+        state = TimerState.RUNNING
+        onStateChanged(state)
 
         timer?.start()
-
     }
 
     fun pause() {
+        if (state != TimerState.RUNNING) return
 
         timer?.cancel()
-
-        isRunning = false
-
+        state = TimerState.PAUSED
+        onStateChanged(state)
     }
 
     fun resume() {
-
+        if (state != TimerState.PAUSED) return
         start()
-
     }
 
     fun reset() {
-
         timer?.cancel()
-
-        remainingTime = TOTAL_TIME
-
-        isRunning = false
-
-        onTick(TOTAL_TIME, 0)
-
+        remainingTime = totalTime
+        state = TimerState.IDLE
+        onStateChanged(state)
+        onTick(totalTime, 0)
     }
-
 }
